@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="23094" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="BYZ-38-t0r">
+    <device id="retina6_12" orientation="portrait" appearance="light"/>
+    <dependencies>
+        <deployment identifier="iOS"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="23084"/>
+        <capability name="Safe area layout guides" minToolsVersion="9.0"/>
+        <capability name="System colors in document resources" minToolsVersion="11.0"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <scenes>
+        <!--View Controller-->
+        <scene sceneID="tne-QT-ifu">
+            <objects>
+                <viewController id="BYZ-38-t0r" customClass="ViewController" customModule="VsionExample2" customModuleProvider="target" sceneMemberID="viewController">
+                    <view key="view" contentMode="scaleToFill" id="8bC-Xf-vdC">
+                        <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="sample" translatesAutoresizingMaskIntoConstraints="NO" id="ri1-Fu-YPs">
+                                <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                            </imageView>
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="mhj-Yz-GhY">
+                                <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                            </imageView>
+                        </subviews>
+                        <viewLayoutGuide key="safeArea" id="6Tk-OE-BBY"/>
+                        <color key="backgroundColor" systemColor="systemBackgroundColor"/>
+                        <constraints>
+                            <constraint firstItem="ri1-Fu-YPs" firstAttribute="leading" secondItem="6Tk-OE-BBY" secondAttribute="leading" id="8Kh-YP-ls2"/>
+                            <constraint firstItem="ri1-Fu-YPs" firstAttribute="top" secondItem="8bC-Xf-vdC" secondAttribute="top" id="9ji-X8-7d7"/>
+                            <constraint firstAttribute="bottom" secondItem="mhj-Yz-GhY" secondAttribute="bottom" id="Vmm-BI-qyc"/>
+                            <constraint firstItem="mhj-Yz-GhY" firstAttribute="trailing" secondItem="6Tk-OE-BBY" secondAttribute="trailing" id="hJ1-Bv-117"/>
+                            <constraint firstItem="ri1-Fu-YPs" firstAttribute="bottom" secondItem="8bC-Xf-vdC" secondAttribute="bottom" id="kZB-Ur-KZg"/>
+                            <constraint firstItem="mhj-Yz-GhY" firstAttribute="top" secondItem="8bC-Xf-vdC" secondAttribute="top" id="qeJ-lo-RfL"/>
+                            <constraint firstAttribute="trailing" secondItem="ri1-Fu-YPs" secondAttribute="trailing" id="s0k-CE-yhW"/>
+                            <constraint firstItem="mhj-Yz-GhY" firstAttribute="leading" secondItem="6Tk-OE-BBY" secondAttribute="leading" id="yA0-GY-MAD"/>
+                        </constraints>
+                    </view>
+                    <connections>
+                        <outlet property="imageView" destination="ri1-Fu-YPs" id="M3P-F4-pVZ"/>
+                        <outlet property="overlayImageView" destination="mhj-Yz-GhY" id="xW9-7l-EVX"/>
+                    </connections>
+                </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="dkx-z0-nzr" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="116.79389312977099" y="3.5211267605633805"/>
+        </scene>
+    </scenes>
+    <resources>
+        <image name="sample" width="1200" height="1800"/>
+        <systemColor name="systemBackgroundColor">
+            <color white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+        </systemColor>
+    </resources>
+</document>
