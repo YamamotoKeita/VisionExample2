@@ -5,7 +5,7 @@ import Vision
 
 class VideoCapture: NSObject {
 
-    let imageBuffer = CurrentValueSubject<CVImageBuffer?, Never>(nil)
+    let imageBufferSubject = CurrentValueSubject<CMSampleBuffer?, Never>(nil)
     let captureSession: AVCaptureSession
     let previewLayer: AVCaptureVideoPreviewLayer
 
@@ -47,6 +47,7 @@ class VideoCapture: NSObject {
     }
 
     func addToView(view: UIView) {
+        previewLayer.removeFromSuperlayer()
         previewLayer.frame = view.bounds
         view.layer.insertSublayer(previewLayer, at: 0)
     }
@@ -55,6 +56,6 @@ class VideoCapture: NSObject {
 
 extension VideoCapture: AVCaptureVideoDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        imageBuffer.send(CMSampleBufferGetImageBuffer(sampleBuffer))
+        imageBufferSubject.send(sampleBuffer)
     }
 }

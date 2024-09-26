@@ -1,3 +1,6 @@
+//
+// 顔認識と認識した顔パーツの描画を行う
+//
 import UIKit
 import Combine
 import Vision
@@ -6,23 +9,39 @@ class FaceRecognizer {
     // CPUパワーを食い過ぎないよう一回顔認識するたびこの時間待機する
     var trackingInterval: TimeInterval = 0.1
 
-    var lineWidth: CGFloat = 1
-    var lineColor: UIColor = UIColor.green
-
     let facePathSubject = CurrentValueSubject<CGPath?, Never>(nil)
 
     var trackingTask: Task<Void, Never>?
 
-    private var currentBuffer: CMSampleBuffer?
+    var isTracking: Bool {
+        trackingTask != nil
+    }
 
-    func startTracking(buffer: CurrentValueSubject<CVImageBuffer?, Never>) async {
+    let outputView = OutputView()
+
+    private var currentBuffer: CMSampleBuffer?
+    private var bag = Set<AnyCancellable>()
+
+    init() {
+        facePathSubject
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                self?.outputView.facePath = $0
+            }
+            .store(in: &bag)
+    }
+
+    // 顔のトラッキングを開始する
+    func startTracking() {
+        guard trackingTask == nil else { return }
+
         trackingTask = Task {
+            // キャンセルされるまで無限ループで顔認識
             while !Task.isCancelled {
                 guard let buffer = currentBuffer else { break }
                 currentBuffer = nil
 
                 guard let handler = makeRequestHandler(buffer: buffer) else {
-                    // TODO エラー制御
                     break
                 }
 
@@ -34,22 +53,20 @@ class FaceRecognizer {
         }
     }
 
+    // 顔のトラッキングを停止する
     func stopTracking() {
         trackingTask?.cancel()
         trackingTask = nil
     }
 
-    func setImageBuffer(_ buffer: CMSampleBuffer) {
+    // 顔認識対象のイメージバッファをセットする
+    func setImageBuffer(_ buffer: CMSampleBuffer?) {
         self.currentBuffer = buffer
     }
 
     private func makeRequestHandler(buffer: CMSampleBuffer) -> VNImageRequestHandler? {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(buffer),
               let exifOrientation = CGImagePropertyOrientation(rawValue: UInt32(exifOrientationFromDeviceOrientation())) else { return nil }
-
-        let width = CVPixelBufferGetWidth(pixelBuffer)
-        let height = CVPixelBufferGetHeight(pixelBuffer)
-
         return VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: exifOrientation, options: [:])
     }
 
@@ -68,13 +85,14 @@ class FaceRecognizer {
         await withCheckedContinuation { continuation in
             let request = VNDetectFaceLandmarksRequest { [weak self] request, error in
                 if let error {
-                    // TODO エラー制御
-                    print(error)
+                    print("顔認識に失敗しました。\(error)")
+                    return
                 }
 
                 guard let self,
                     let faces = request.results as? [VNFaceObservation],
                     let mainFace = selectMainFace(faces: faces) else {
+                    // 顔検出なし
                     continuation.resume(returning: nil)
                     return
                 }
@@ -86,7 +104,7 @@ class FaceRecognizer {
             do {
                 try requestHandeler.perform([request])
             } catch let error as NSError {
-                print("Failed to perform image request: \(error)")
+                print("顔認識に失敗しました。\(error)")
                 continuation.resume(returning: nil)
             }
         }
@@ -124,29 +142,17 @@ class FaceRecognizer {
                                    isClosed: true)
         }
 
-        // VNFaceObservationの座標系は左下原点、UIKitの座標系は左上原点なので、上下を反転する
+        // VNFaceObservationの座標系は左下原点、UIKitの座標系は左上原点なので上下を反転する（何故か左右も反転する必要があった）
+        // また、幅高さを認識した顔のboundingのサイズにする
         var transform = CGAffineTransform.identity
-        transform = transform.translatedBy(x: face.boundingBox.origin.x, y: 1 - face.boundingBox.origin.y)
-        transform = transform.scaledBy(x: 1, y: -1)
+        transform = transform.translatedBy(x: 1 - face.boundingBox.origin.x, y: 1 - face.boundingBox.origin.y)
+        transform = transform.scaledBy(x: -face.boundingBox.width, y: -face.boundingBox.height)
 
         guard let adjustedPath = landmarkPath.copy(using: &transform) else {
             return nil
         }
 
         return adjustedPath
-    }
-
-    //
-    // VNFaceObservationの座標系は左下原点、UIKitの座標系は左上原点なので、上下を反転する。
-    // また、VNFaceObservationの座標は画像サイズに対する比率なので、描画領域のサイズに合わせて拡大する。
-    //
-    private func adjustmentTransform(faceBounds: CGRect, canvasSize: CGSize) -> CGAffineTransform {
-        var transform = CGAffineTransform.identity
-        transform = transform.translatedBy(x: canvasSize.width * faceBounds.origin.x,
-                                           y: canvasSize.height * (1 - faceBounds.origin.y))
-        transform = transform.scaledBy(x: canvasSize.width * faceBounds.size.width,
-                                       y: canvasSize.height * -faceBounds.size.height)
-        return transform
     }
 
     //
@@ -157,37 +163,6 @@ class FaceRecognizer {
             $0.boundingBox.area > $1.boundingBox.area
         })
         .first
-    }
-
-    //
-    // 顔を描画するキャンバスのサイズを計算する。
-    // 画像と同じアスペクト比で表示領域にぴったり収まるサイズにする。
-    //
-    // - Parameters:
-    //   - imageSize: 画像のサイズ
-    //   - bounds: 画像を表示する領域（UIImageViewなど）のサイズ
-    //   - scaleMode: 拡大縮小の方法
-    //
-    private func calcCanvasSize(imageSize: CGSize, bounds: CGSize, scaleMode: ScaleMode) -> CGSize {
-        let boundsRatio = bounds.width / bounds.height
-        let imageRatio = imageSize.width / imageSize.height
-
-        let scale = switch scaleMode {
-        case .fill:
-            if boundsRatio > imageRatio {
-                bounds.width / imageSize.width
-            } else {
-                bounds.height / imageSize.height
-            }
-        case .fit:
-            if boundsRatio > imageRatio {
-                bounds.height / imageSize.height
-            } else {
-                bounds.width / imageSize.width
-            }
-        }
-
-        return CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
     }
 
     private func exifOrientationFromDeviceOrientation() -> Int32 {
@@ -204,10 +179,44 @@ class FaceRecognizer {
         }
     }
 
-    // 描画領域に対する拡大・縮小方法
-    enum ScaleMode {
-        case fill
-        case fit
+    // 顔認識結果を描画するView
+    class OutputView: UIView {
+        var lineWidth: CGFloat = 1
+        var lineColor: UIColor = UIColor.green
+
+        var facePath: CGPath? {
+            didSet {
+                setNeedsDisplay()
+            }
+        }
+
+        required init?(coder aDecoder: NSCoder) {
+            super.init(coder: aDecoder)
+            backgroundColor = .clear
+        }
+
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            backgroundColor = .clear
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            setNeedsDisplay()
+        }
+
+        open override func draw(_ rect: CGRect) {
+            super.draw(rect) // backgroundColorが塗られる
+            guard let context = UIGraphicsGetCurrentContext(), let facePath else { return }
+
+            var transform = CGAffineTransform(scaleX: rect.width, y: rect.height)
+            guard let path = facePath.copy(using: &transform) else { return }
+
+            context.setLineWidth(lineWidth)
+            context.setStrokeColor(lineColor.cgColor)
+            context.addPath(path)
+            context.strokePath()
+        }
     }
 }
 
