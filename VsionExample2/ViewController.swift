@@ -4,12 +4,16 @@ class ViewController: UIViewController {
 
     @IBOutlet weak var imageView: UIImageView!
     @IBOutlet weak var overlayImageView: UIImageView!
-
+    @IBOutlet weak var captureView: UIView!
+    
     let faceRecognizer = FaceRecognizer()
+    let videoCapture = VideoCapture()
 
     override func viewDidLoad() {
         super.viewDidLoad()
         overlayImageView.contentMode = imageView.contentMode
+
+        videoCapture.addToView(view: captureView)
 
         Task {
             guard let image = imageView.image,
@@ -19,6 +23,11 @@ class ViewController: UIViewController {
                                                                scaleMode: scaleMode)
             overlayImageView.image = faceImage
         }
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        videoCapture.start()
     }
 }
 

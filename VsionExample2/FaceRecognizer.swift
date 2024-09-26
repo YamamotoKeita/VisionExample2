@@ -1,77 +1,99 @@
 import UIKit
+import Combine
 import Vision
 
 class FaceRecognizer {
+    // CPUパワーを食い過ぎないよう一回顔認識するたびこの時間待機する
+    var trackingInterval: TimeInterval = 0.1
+
     var lineWidth: CGFloat = 1
     var lineColor: UIColor = UIColor.green
 
-    func makeFaceImage(image: UIImage, viewSize: CGSize, scaleMode: ScaleMode) async -> UIImage? {
+    let facePathSubject = CurrentValueSubject<CGPath?, Never>(nil)
+
+    var trackingTask: Task<Void, Never>?
+
+    private var currentBuffer: CMSampleBuffer?
+
+    func startTracking(buffer: CurrentValueSubject<CVImageBuffer?, Never>) async {
+        trackingTask = Task {
+            while !Task.isCancelled {
+                guard let buffer = currentBuffer else { break }
+                currentBuffer = nil
+
+                guard let handler = makeRequestHandler(buffer: buffer) else {
+                    // TODO エラー制御
+                    break
+                }
+
+                let facePath = await recognizeFaces(requestHandeler: handler)
+                facePathSubject.send(facePath)
+
+                await Task.sleep(interval: trackingInterval)
+            }
+        }
+    }
+
+    func stopTracking() {
+        trackingTask?.cancel()
+        trackingTask = nil
+    }
+
+    func setImageBuffer(_ buffer: CMSampleBuffer) {
+        self.currentBuffer = buffer
+    }
+
+    private func makeRequestHandler(buffer: CMSampleBuffer) -> VNImageRequestHandler? {
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(buffer),
+              let exifOrientation = CGImagePropertyOrientation(rawValue: UInt32(exifOrientationFromDeviceOrientation())) else { return nil }
+
+        let width = CVPixelBufferGetWidth(pixelBuffer)
+        let height = CVPixelBufferGetHeight(pixelBuffer)
+
+        return VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: exifOrientation, options: [:])
+    }
+
+    // テスト用。UIImageを対象に顔認識するとき使う
+    private func makeRequestHandler(image: UIImage) -> VNImageRequestHandler? {
         guard let cgImage = image.cgImage,
               let orientation = CGImagePropertyOrientation(rawValue: UInt32(image.imageOrientation.rawValue)) else {
             return nil
         }
+        return VNImageRequestHandler(cgImage: cgImage,
+                                     orientation: orientation,
+                                     options: [:])
+    }
 
-        return await withCheckedContinuation { continuation in
-            startFaceRecognition(cgImage: cgImage,
-                             orientation: orientation,
-                             viewSize: viewSize,
-                             scaleMode: scaleMode,
-                             continuation: continuation)
+    private func recognizeFaces(requestHandeler: VNImageRequestHandler) async -> CGPath? {
+        await withCheckedContinuation { continuation in
+            let request = VNDetectFaceLandmarksRequest { [weak self] request, error in
+                if let error {
+                    // TODO エラー制御
+                    print(error)
+                }
+
+                guard let self,
+                    let faces = request.results as? [VNFaceObservation],
+                    let mainFace = selectMainFace(faces: faces) else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+
+                let path = makeFacePath(face: mainFace)
+                continuation.resume(returning: path)
+            }
+
+            do {
+                try requestHandeler.perform([request])
+            } catch let error as NSError {
+                print("Failed to perform image request: \(error)")
+                continuation.resume(returning: nil)
+            }
         }
     }
 
-    // 顔認識を開始
-    private func startFaceRecognition(
-        cgImage: CGImage,
-        orientation: CGImagePropertyOrientation,
-        viewSize: CGSize,
-        scaleMode: ScaleMode,
-        continuation: CheckedContinuation<UIImage?, Never>?
-    ) {
-        let imageRequestHandler = VNImageRequestHandler(cgImage: cgImage,
-                                                        orientation: orientation,
-                                                        options: [:])
-
-        let request = VNDetectFaceLandmarksRequest { [weak self] request, error in
-            if let error {
-                print(error)
-            }
-            guard let self,
-                let faces = request.results as? [VNFaceObservation],
-                let mainFace = selectMainFace(faces: faces) else {
-                continuation?.resume(returning: nil)
-                return
-            }
-
-            let image = drawFaceLines(face: mainFace,
-                                      imageSize: CGSize(width: cgImage.width, height: cgImage.height),
-                                      bounds: viewSize,
-                                      scaleMode: scaleMode)
-            continuation?.resume(returning: image)
-        }
-
-        do {
-            try imageRequestHandler.perform([request])
-        } catch let error as NSError {
-            print("Failed to perform image request: \(error)")
-            continuation?.resume(returning: nil)
-        }
-    }
-
-
-    // 顔のパーツを描画する
-    private func drawFaceLines(face: VNFaceObservation,
-                               imageSize: CGSize,
-                               bounds: CGSize,
-                               scaleMode: ScaleMode) -> UIImage? {
-
+    func makeFacePath(face: VNFaceObservation) -> CGPath? {
         guard let landmarks = face.landmarks else {
-            return nil
-        }
-
-        let canvasSize = self.calcCanvasSize(imageSize: imageSize, bounds: bounds, scaleMode: scaleMode)
-        UIGraphicsBeginImageContextWithOptions(canvasSize, false, 0.0)
-        guard let context = UIGraphicsGetCurrentContext() else {
             return nil
         }
 
@@ -102,30 +124,23 @@ class FaceRecognizer {
                                    isClosed: true)
         }
 
-        var transform = transform(faceBounds: face.boundingBox, canvasSize: canvasSize)
+        // VNFaceObservationの座標系は左下原点、UIKitの座標系は左上原点なので、上下を反転する
+        var transform = CGAffineTransform.identity
+        transform = transform.translatedBy(x: face.boundingBox.origin.x, y: 1 - face.boundingBox.origin.y)
+        transform = transform.scaledBy(x: 1, y: -1)
 
         guard let adjustedPath = landmarkPath.copy(using: &transform) else {
             return nil
         }
 
-        context.setStrokeColor(lineColor.cgColor)
-        context.setLineWidth(lineWidth)
-
-        context.addPath(adjustedPath)
-        context.strokePath()
-
-        let image = UIGraphicsGetImageFromCurrentImageContext()
-
-        UIGraphicsEndImageContext()
-
-        return image
+        return adjustedPath
     }
 
     //
     // VNFaceObservationの座標系は左下原点、UIKitの座標系は左上原点なので、上下を反転する。
     // また、VNFaceObservationの座標は画像サイズに対する比率なので、描画領域のサイズに合わせて拡大する。
     //
-    private func transform(faceBounds: CGRect, canvasSize: CGSize) -> CGAffineTransform {
+    private func adjustmentTransform(faceBounds: CGRect, canvasSize: CGSize) -> CGAffineTransform {
         var transform = CGAffineTransform.identity
         transform = transform.translatedBy(x: canvasSize.width * faceBounds.origin.x,
                                            y: canvasSize.height * (1 - faceBounds.origin.y))
@@ -175,6 +190,20 @@ class FaceRecognizer {
         return CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
     }
 
+    private func exifOrientationFromDeviceOrientation() -> Int32 {
+        let deviceOrientation = UIDevice.current.orientation
+        switch deviceOrientation {
+        case .portraitUpsideDown:
+            return 8
+        case .landscapeLeft:
+            return 3
+        case .landscapeRight:
+            return 1
+        default:
+            return 6
+        }
+    }
+
     // 描画領域に対する拡大・縮小方法
     enum ScaleMode {
         case fill
@@ -195,4 +224,10 @@ private extension CGMutablePath {
 
 private extension CGRect {
     var area: CGFloat { width * height }
+}
+
+extension Task where Success == Never, Failure == Never {
+    static func sleep(interval: TimeInterval) async {
+        try? await sleep(nanoseconds: UInt64(interval * Double(1_000_000_000)))
+    }
 }

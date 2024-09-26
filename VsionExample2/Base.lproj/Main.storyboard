@@ -23,6 +23,11 @@
                             <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="mhj-Yz-GhY">
                                 <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
                             </imageView>
+                            <view contentMode="scaleToFill" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="vrK-4H-Z99">
+                                <rect key="frame" x="0.0" y="59" width="393" height="759"/>
+                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                                <color key="backgroundColor" systemColor="systemBackgroundColor"/>
+                            </view>
                         </subviews>
                         <viewLayoutGuide key="safeArea" id="6Tk-OE-BBY"/>
                         <color key="backgroundColor" systemColor="systemBackgroundColor"/>
@@ -38,6 +43,7 @@
                         </constraints>
                     </view>
                     <connections>
+                        <outlet property="captureView" destination="vrK-4H-Z99" id="RgD-p9-Z1c"/>
                         <outlet property="imageView" destination="ri1-Fu-YPs" id="M3P-F4-pVZ"/>
                         <outlet property="overlayImageView" destination="mhj-Yz-GhY" id="xW9-7l-EVX"/>
                     </connections>
