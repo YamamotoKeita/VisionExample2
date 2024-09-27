@@ -38,11 +38,11 @@ class FaceRecognizer {
         trackingTask = Task {
             // キャンセルされるまで無限ループで顔認識
             while !Task.isCancelled {
-                guard let buffer = currentBuffer else { break }
+                guard let buffer = currentBuffer else { continue }
                 currentBuffer = nil
 
                 guard let handler = makeRequestHandler(buffer: buffer) else {
-                    break
+                    continue
                 }
 
                 let facePath = await recognizeFaces(requestHandeler: handler)
